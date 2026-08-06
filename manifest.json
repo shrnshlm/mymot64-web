@@ -1,0 +1,16 @@
+{
+  "name": "לאן? · תחבורה ציבורית בישראל",
+  "short_name": "לאן?",
+  "description": "מסלולי אוטובוסים בישראל עם זמן אמת וקורקינטים בקרבת מקום.",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1017",
+  "theme_color": "#0c121b",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
