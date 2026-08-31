@@ -100,6 +100,15 @@
   a{color:var(--accent)}
   button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   @media (prefers-reduced-motion:reduce){.spin{animation:none}.go:active{transform:none}}
+
+  /* Disruption notices, shown above the routes. Amber rather than red: these
+     are advisories about a journey that still works, not failures. */
+  .alerts{background:#3a2c12;border:1px solid #7a5a1e;border-radius:14px;
+    padding:12px 14px;margin:0 0 14px}
+  .alerts-h{font-weight:700;color:#f5c65a;margin-bottom:6px}
+  .alerts ul{margin:0;padding-inline-start:18px}
+  .alerts li{margin:4px 0;font-size:.92rem;line-height:1.5;color:#e8ddc6}
+  .alerts li b{color:#f5c65a}
 </style>
 </head>
 <body>
@@ -182,9 +191,57 @@
       const p = await r.json();
       if(p.error){ out.innerHTML = `<p class="status err">${esc(p.error)}</p>`; return; }
       render(p);
+      // Disruptions live outside the timetable, so a plan can look perfect while
+      // a stop on it has moved. Fetched after render so the route still appears
+      // instantly, and failure is silent — an alerts outage must not cost the plan.
+      showAlerts(p);
     }catch(err){
       out.innerHTML = `<p class="status err">אין חיבור לשרת. נסה שוב.</p>`;
     }finally{ $("go").disabled = false; }
+  }
+
+  // Pull the stop and route ids this journey actually touches, so the notices
+  // shown are the ones that affect it rather than everything in the country.
+  function journeyIds(p){
+    const stops = new Set(), routes = new Set();
+    const walk = (o)=>{
+      if(!o || typeof o !== "object") return;
+      if(Array.isArray(o)) return o.forEach(walk);
+      if(o.stopId) stops.add(String(o.stopId));
+      if(o.stop && o.stop.id) stops.add(String(o.stop.id));
+      if(o.routeId) routes.add(String(o.routeId));
+      Object.values(o).forEach(walk);
+    };
+    walk(p);
+    return { stops:[...stops], routes:[...routes] };
+  }
+
+  const EFFECT_HE = {
+    DETOUR:"מסלול עוקף", STOP_MOVED:"תחנה הועברה", NO_SERVICE:"אין שירות",
+    REDUCED_SERVICE:"שירות מצומצם", SIGNIFICANT_DELAYS:"עיכובים משמעותיים",
+    MODIFIED_SERVICE:"שינוי בשירות", ADDITIONAL_SERVICE:"שירות נוסף",
+    OTHER_EFFECT:"שינוי", UNKNOWN_EFFECT:"שינוי"
+  };
+
+  async function showAlerts(p){
+    try{
+      const { stops, routes } = journeyIds(p);
+      if(!stops.length && !routes.length) return;
+      const q = new URLSearchParams();
+      if(stops.length) q.set("stop_ids", stops.slice(0,60).join(","));
+      if(routes.length) q.set("route_ids", routes.slice(0,60).join(","));
+      q.set("limit","5");
+      const r = await fetch(`${API}/api/alerts?${q}`);
+      if(!r.ok) return;                       // silent: alerts are a bonus, not the plan
+      const d = await r.json();
+      if(!d.alerts || !d.alerts.length) return;
+      const items = d.alerts.map(a=>{
+        const tag = EFFECT_HE[a.effect] || "שינוי";
+        return `<li><b>${esc(tag)}</b> ${esc(a.header || "")}</li>`;
+      }).join("");
+      out.insertAdjacentHTML("afterbegin",
+        `<div class="alerts" role="status"><div class="alerts-h">⚠️ שיבושים במסלול הזה</div><ul>${items}</ul></div>`);
+    }catch(_){ /* never let a disruption lookup break the journey */ }
   }
 
   function render(p){
